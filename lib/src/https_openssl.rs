@@ -1,3 +1,4 @@
+use std::os::unix::prelude::IntoRawFd;
 use std::sync::{Arc,Mutex};
 use std::rc::{Rc,Weak};
 use std::cell::RefCell;
@@ -22,7 +23,7 @@ use openssl::nid;
 use openssl::error::ErrorStack;
 use openssl::ssl::SslVersion;
 
-use sozu_command::scm_socket::ScmSocket;
+use sozu_command::scm_socket::{ScmSocket, Listeners};
 use sozu_command::proxy::{Application,CertFingerprint,CertificateAndKey,
   ProxyRequestData,HttpFront,HttpsListener,ProxyRequest,ProxyResponse,
   ProxyResponseStatus,TlsVersion,ProxyEvent,Query,QueryCertificateType,
@@ -1903,7 +1904,15 @@ pub fn start(config: HttpsListener, channel: ProxyChannel, max_buffers: usize, b
   if configuration.add_listener(config, token).is_some() {
     if configuration.activate_listener(&mut event_loop, &front, None).is_some() {
 
-      let (scm_server, _scm_client) = UnixStream::pair().unwrap();
+      let (scm_server, scm_client) = UnixStream::pair().unwrap();
+      let scm = ScmSocket::new(scm_client.into_raw_fd());
+      if let Err(e) = scm.send_listeners(&Listeners {
+        http: Vec::new(),
+        tls:  Vec::new(),
+        tcp:  Vec::new(),
+      }) {
+        error!("error sending empty listeners: {:?}", e);
+      }
       let mut server_config: server::ServerConfig = Default::default();
       server_config.max_connections = max_buffers;
       let mut server  = Server::new(event_loop, channel, ScmSocket::new(scm_server.as_raw_fd()),
