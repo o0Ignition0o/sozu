@@ -1879,23 +1879,23 @@ pub fn start(config: HttpsListener, channel: ProxyChannel, max_buffers: usize, b
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for channel", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for timer", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for metrics", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
 
   let token = {
     let entry = sessions.vacant_entry();
     let key = entry.key();
-    let _e = entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    let _e = entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
     Token(key)
   };
 
