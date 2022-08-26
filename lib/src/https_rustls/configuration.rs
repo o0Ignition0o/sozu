@@ -1,3 +1,4 @@
+use std::os::unix::prelude::IntoRawFd;
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -13,7 +14,7 @@ use rustls::{ServerConfig, ServerSession, NoClientAuth, ProtocolVersion,
   ALL_CIPHERSUITES};
 use time::{Duration, Instant};
 
-use sozu_command::scm_socket::ScmSocket;
+use sozu_command::scm_socket::{ScmSocket, Listeners};
 use sozu_command::proxy::{Application,
   ProxyRequestData,HttpFront,HttpsListener,ProxyRequest,ProxyResponse,
   ProxyResponseStatus,AddCertificate,RemoveCertificate,ReplaceCertificate,
@@ -732,23 +733,23 @@ pub fn start(config: HttpsListener, channel: ProxyChannel, max_buffers: usize, b
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for channel", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for timer", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
   {
     let entry = sessions.vacant_entry();
     info!("taking token {:?} for metrics", SessionToken(entry.key()));
-    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
   }
 
   let token = {
     let entry = sessions.vacant_entry();
     let key = entry.key();
-    let _e = entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPListen })));
+    let _e = entry.insert(Rc::new(RefCell::new(ListenSession { protocol: Protocol::HTTPSListen })));
     Token(key)
   };
 
@@ -756,9 +757,18 @@ pub fn start(config: HttpsListener, channel: ProxyChannel, max_buffers: usize, b
   let mut configuration = Proxy::new(pool.clone(), backends.clone());
   if configuration.add_listener(config, token).is_some() &&
     configuration.activate_listener(&mut event_loop, &front, None).is_some() {
-      let (scm_server, _scm_client) = UnixStream::pair().unwrap();
+      let (scm_server, scm_client) = UnixStream::pair().unwrap();
+      let scm = ScmSocket::new(scm_client.into_raw_fd());
+      if let Err(e) = scm.send_listeners(&Listeners {
+        http: Vec::new(),
+        tls:  Vec::new(),
+        tcp:  Vec::new(),
+      }) {
+        error!("error sending empty listeners: {:?}", e);
+      }
       let mut server_config: server::ServerConfig = Default::default();
       server_config.max_connections = max_buffers;
+
       let mut server  = Server::new(event_loop, channel,ScmSocket::new(scm_server.as_raw_fd()),
           sessions, pool, backends, None, Some(HttpsProvider::Rustls(configuration)),
           None, server_config, None, false);
